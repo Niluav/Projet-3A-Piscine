@@ -1,93 +1,57 @@
+import cv2
 import numpy as np
-import cv2 as cv
+import matplotlib.pyplot as plt
 
-#Chargement de l'image
-img = cv.imread('image_satellite4.png') 
+# Lecture de l'image source
+image = cv2.imread("image_satellite_2.png")
 
-#Affichage de l'image
-cv.imshow('Originale',img)
+# Conversion de l'image en RVB
+image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+# Transformation de l'image en un tableau 2D de pixels et de trois couleurs (RVB)
+pixel_values = image.reshape((-1, 3))
+# Conversion en flotant
+pixel_values = np.float32(pixel_values)
+# Affichage des valeurs du tableau de pixels obtenu
+print(pixel_values.shape)
+(2073600, 3)
 
-#Application du 1er seuillage
-ret, thresh=cv.threshold(img, 140, 255, cv.THRESH_TOZERO)
+# Definition du critere d'arret des iterations
+criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.2)
 
-cv.imshow('Etape 1',thresh)
+# Nombre de clusters (k)
+k = 20
+# Definition des clusters, des labels et de leurs points centre
+_, labels, (centers) = cv2.kmeans(pixel_values, k, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
 
-#Séparation des différents canaux de couleurs
-b, g, r = cv.split(thresh) 
+# Conversion de nouveau en valeurs de 8 bits
+centers = np.uint8(centers)
+# Conversion du tableau de labels en tableau d'une seule dimension
+labels = labels.flatten()
 
-#Crée des tableaux identiques a r,g et b rempli de 0
-b_const = np.zeros_like(b) 
-g_const = np.zeros_like(g)
-r_const = np.zeros_like(r)
+# Conversion de tous les pixels en la couleur des centroids
+segmented_image = centers[labels.flatten()]
 
-#Inverse le tableau (0-255 devient 255-0)
-b_invert = np.invert(b)
-
-#Re-crée une image BGR avec seulement le bleu
-bleu = cv.merge([b,g_const,r_const])
-
-#Re-crée une image en nuance de gris avec les zones contenant du bleus en blanc
-bleu_inv = cv.merge([b_invert])
-
-cv.imshow('Etape 2',bleu)
-
-#Applique un flou légé + suppression du bruit
-blur = cv.GaussianBlur(img, (3, 3), 0) 
-
-#Passe l'image en nuance de gris
-gray = cv.cvtColor(blur, cv.COLOR_BGR2GRAY) 
+# Transformation de l'image afin de retrouver les dimensions de l'image d'origine
+segmented_image = segmented_image.reshape(image.shape)
+# Affichage de l'image obtenue
+plt.figure(1)
+plt.imshow(segmented_image)
 
 
-cv.imshow('Etape 3b',gray)
-
-#Superposition des 2 images (bleu inversé et contours)
-image_add = cv.add(bleu_inv, gray)
-
-#Utilisation de l'algorithme de Sobel(permet de récuperer les contours)
-grad_x = cv.Sobel(image_add, cv.CV_16S, 1, 0, ksize=3, scale=1, delta=0, borderType=cv.BORDER_DEFAULT)
-grad_y = cv.Sobel(image_add, cv.CV_16S, 0, 1, ksize=3, scale=1, delta=0, borderType=cv.BORDER_DEFAULT)
-abs_grad_x = cv.convertScaleAbs(grad_x)
-abs_grad_y = cv.convertScaleAbs(grad_y)
-
-grad = cv.addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0)
-
-inverted_image = cv.bitwise_not(grad)
-img2 = cv.blur(inverted_image, (5, 5))
-
-cv.imshow('Etape 4', inverted_image)
-
-# Converti l'image seulement en noir et blanc
-_, threshold = cv.threshold(grad, 8.5, 255, cv.THRESH_TOZERO)
-# Detecte les contours dans l'image
-contours, _= cv.findContours(threshold, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-dark_spots = []
-pool = 0
-# Boucle pour tout les contours trouvés
-for contour in contours :
-
-    # Calculer le nombre de pixels de chaque contour
-    area = cv.contourArea(contour)
-
-    # Conserver seulement les contours les plus grands
-    if  area > 700:
-        pool = pool +1
-        dark_spots.append(contour)
-
-#Affiche le nombre de piscine détectées
-print(pool)
-
-#Trace les rectangle a chaques contour trouvé
-for spot in dark_spots:
-    x, y, w, h = cv.boundingRect(spot)
-    if 300 < w*h < 3400:
-        cv.rectangle(img, (x, y), (x+w, y+h), (0, 0, 255), 2)
-
-#Image finale avec les rectangle sur les piscines
-cv.imshow('Etape 5',img)
-
-#Enregistre l'image finale
-cv.imwrite("outputimagetes.jpg", img)
-
-#Termine le programme dès qu'une touche est appuyée
-cv.waitKey(0)
-cv.destroyAllWindows()
+# Masquage de certains clusters
+# Creation d'une copie de l'image obtenue
+masked_image = np.copy(image)
+# Conversion de l'image en vecteur de valeurs de pixels
+masked_image = masked_image.reshape((-1, 3))
+# Selection des labels des clusters que l'on souhaite masquer
+cluster1 = 1
+cluster2 = 6
+# Masquage de clusters selectionnes (ici 1 et 6) (Les pixels deviennent noir)
+masked_image[labels == cluster1] = [0, 0, 0]
+masked_image[labels == cluster2] = [0, 0, 0]
+# Conversion au format d'origine
+masked_image = masked_image.reshape(image.shape)
+# Affichage de l'image
+plt.figure(2)
+plt.imshow(masked_image)
+plt.show()
